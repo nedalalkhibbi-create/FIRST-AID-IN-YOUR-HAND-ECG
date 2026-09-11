@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECG Clinical Assistant - Dr. Nedal Alkhibbi</title>
+    <style>
+        :root { --primary: #1e3a8a; --accent: #2563eb; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --critical: #dc2626; --warning: #d97706; --stable: #16a34a; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 16px; line-height: 1.6; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { background: var(--primary); color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        header h1 { font-size: 1.5rem; margin-bottom: 5px; }
+        header p { font-size: 0.9rem; opacity: 0.9; }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgb(0 0 0 / 0.05); margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--primary); font-size: 0.95rem; }
+        input[type="file"] { width: 100%; padding: 12px; border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; cursor: pointer; }
+        button.submit-btn { background: var(--accent); color: white; border: none; width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+        button.submit-btn:hover { background: #1d4ed8; }
+        button.submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+        #resultContainer { display: none; margin-top: 20px; border-right: 5px solid var(--accent); padding: 15px; background: #f8fafc; border-radius: 8px; }
+        .result-item { margin-bottom: 15px; }
+        .result-title { font-weight: bold; color: var(--primary); font-size: 0.9rem; margin-bottom: 4px; }
+        .result-content { font-size: 0.95rem; color: #334155; white-space: pre-line; }
+        .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 15px; color: white; }
+        .badge.Critical { background-color: var(--critical); }
+        .badge.Warning { background-color: var(--warning); }
+        .badge.Stable { background-color: var(--stable); }
+        .loading-spinner { text-align: center; padding: 20px; color: var(--accent); font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ECG Clinical Assistant</h1>
+            <p>المساعد الإكلينيكي لتخطيط القلب - د. نضال الخبي</p>
+        </header>
+        <div class="card">
+            <form id="ecgForm">
+                <div class="form-group">
+                    <label for="ecgFile">التقط صورة تخطيط القلب أو ارفع الملف:</label>
+                    <input type="file" id="ecgFile" accept="image/*" capture="environment" required>
+                </div>
+                <button type="submit" id="submitBtn" class="submit-btn">تحليل التخطيط بالذكاء الاصطناعي</button>
+            </form>
+            
+            <div id="loading" class="loading-spinner">جاري تحليل التخطيط الطبي بدقة وعناية، يرجى الانتظار...</div>
+
+            <div id="resultContainer">
+                <div id="alertBadge" class="badge"></div>
+                
+                <div class="result-item">
+                    <div class="result-title">⚠️ الخلاصة السريرية (عربي):</div>
+                    <div class="result-content" id="summaryAr"></div>
+                </div>
+
+                <div class="result-item">
+                    <div class="result-title">🩺 التفسير الإكلينيكي المفصل (عربي):</div>
+                    <div class="result-content" id="interAr"></div>
+                </div>
+
+                <div class="result-item">
+                    <div class="result-title">💡 التوصيات العلاجية والخطوات الفورية (عربي):</div>
+                    <div class="result-content" id="recAr"></div>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;">
+
+                <div class="result-item" dir="ltr" style="text-align: left;">
+                    <div class="result-title">Clinical Interpretation (EN):</div>
+                    <div class="result-content" id="interEn"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('ecgForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('ecgFile');
+            if (!fileInput.files || fileInput.files.length === 0) return;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('resultContainer');
+
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            container.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/ecg/analyze', { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
+                const result = await response.json();
+                
+                if (result.ok) {
+                    const badge = document.getElementById('alertBadge');
+                    const alertType = result.alert_type || 'Warning';
+                    
+                    badge.className = `badge ${alertType}`;
+                    badge.textContent = result.alert_level || 'نتيجة التخطيط';
+
+                    document.getElementById('summaryAr').textContent = result.summary_ar || '';
+                    document.getElementById('interAr').textContent = result.interpretation_ar || '';
+                    document.getElementById('recAr').textContent = result.recommendation_ar || '';
+                    document.getElementById('interEn').textContent = result.interpretation_en || '';
+                    
+                    container.style.display = 'block';
+                    container.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert('حدث خطأ أثناء معالجة الصورة.');
+                }
+            } catch (error) {
+                alert('فشل الاتصال بالخادم. تأكد من اتصال الإنترنت.');
+            } finally {
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
